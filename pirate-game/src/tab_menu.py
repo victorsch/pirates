@@ -60,3 +60,15 @@ class TabMenu:
             coords = f"({int(self.ship.x)}, {int(self.ship.y)})"
             text = font.render(f"Coordinates: {coords}", True, (180, 220, 255))
             screen.blit(text, (menu_rect.x + 40, detail_y))
+
+        # Display player inventory
+        menu_x, menu_y = 50, 50
+        player_inventory = getattr(self.ship, "inventory", {})
+        inventory_lines = [
+            f"Gold: {player_inventory.get('gold', 0)}",
+            f"Goods: {player_inventory.get('goods', 0)}",
+            f"Crew: {player_inventory.get('crew', 0)}"
+        ]
+        for i, line in enumerate(inventory_lines):
+            text = font.render(line, True, (255, 255, 255))
+            screen.blit(text, (menu_x, menu_y + i * 30))

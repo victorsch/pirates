@@ -10,15 +10,17 @@ class Island:
         self.has_port = has_port
         self.name = name
         self.port_name = port_name
+        self.name_surface = None
+        self.port_surface = None
         self.font = pygame.font.SysFont(None, 20)
         if self.name:
             self.name_surface = self.font.render(self.name, True, (0, 0, 0))
-        else:
-            self.name_surface = None
         if self.has_port and self.port_name:
             self.port_surface = self.font.render(self.port_name, True, (139, 69, 19))
-        else:
-            self.port_surface = None
+        self.settlement = random.choice([None, "Village", "Town", "City"])
+        self.population = random.randint(0, 5000) if self.settlement else 0
+        self.law_status = random.choice(["Lawless", "Orderly", "Pirate Haven"])
+        self.ownership = random.choice(["None", "Empire", "Pirates", "Merchants"])
 
     def draw(self, screen, camera_offset_x, camera_offset_y):
         rect = pygame.Rect(

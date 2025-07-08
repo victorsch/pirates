@@ -3,7 +3,6 @@ import math
 import random
 from ship import Ship
 from plunder import Plunder
-from cannonball import Cannonball  # Import Cannonball class
 
 class NpcShip(Ship):
     def __init__(self, x, y, width=20, height=40, captain_name="Captain", ship_name="NPC Ship"):
@@ -18,6 +17,9 @@ class NpcShip(Ship):
         # Weapons
         self.cannonballs = []
         self.cannon_reload = 0
+
+    def drop_plunder(self):
+        return Plunder(self.x, self.y, random.randint(10, 50))
 
     def update(self, islands=None, dt=1/60):
         # Change direction and sail height every 2-5 seconds
@@ -122,45 +124,6 @@ class NpcShip(Ship):
 
         # Debug center
         #pygame.draw.circle(screen, (255, 0, 0), (int(cx), int(cy)), 3)
-
-    def drop_plunder(self):
-        """Create plunder when the ship is sunk."""
-        gold = random.randint(50, 200)
-        goods = random.randint(10, 50)
-        crew = random.randint(1, 5)
-        return Plunder(self.x, self.y, gold, goods, crew)
-
-    def fire_cannon_at_player(self, player_ship):
-        """Fire cannonballs out the sides like the player ship."""
-        # Reduce reload timer
-        if self.cannon_reload > 0:
-            self.cannon_reload -= 1
-
-        # Fire if reload timer is zero
-        if self.cannon_reload <= 0:
-            distance_to_player = math.hypot(self.x - player_ship.x, self.y - player_ship.y)
-            if distance_to_player <= 200:  # Adjusted range to 500
-                print(f"{self.captain_name} firing broadside!")
-
-                # Adjust cannonball positioning to align with the ship's center and orientation
-                offset = self.width // 2
-                angle_rad = math.radians(self.angle)
-
-                # Perpendicular vector (unit vector)
-                perp_x = math.cos(angle_rad)
-                perp_y = -math.sin(angle_rad)
-
-                # Left broadside (port)
-                lx = self.x + offset * perp_x
-                ly = self.y + offset * perp_y
-                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, parent=self))
-
-                # Right broadside (starboard)
-                rx = self.x - offset * perp_x
-                ry = self.y - offset * perp_y
-                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, parent=self))
-
-                self.cannon_reload = 240  # Reset reload timer to 1 second at 60fps
 
     # def check_cannonball_collision(self, cannonballs):
     #     ship_rect = pygame.Rect(self.x - self.width // 2, self.y - self.height // 2, self.width, self.height)
