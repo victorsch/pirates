@@ -18,7 +18,7 @@ def generate_chunk(chunk_x, chunk_y):
     # Procedurally generate islands
     random.seed((chunk_x, chunk_y, "island"))
     islands = []
-    for _ in range(random.randint(0, 2)):
+    for _ in range(random.randint(3, 6)):
         ix = chunk_x * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
         iy = chunk_y * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
         has_port = random.choice([True, False])
@@ -99,17 +99,18 @@ def handle_menus(ship, port_menu, tab_menu, islands, screen, font):
                     active_menu = None
     return None  # Continue normal gameplay
 
-def draw_overlay(screen, font, player_inventory):
+def draw_overlay(screen, font, player_ship):
     # Draw overlay with player stats
     overlay_rect = pygame.Rect(10, 10, 200, 100)
     pygame.draw.rect(screen, (0, 0, 0), overlay_rect)
     pygame.draw.rect(screen, (255, 255, 255), overlay_rect, 2)
 
-    # Display player inventory
+    # Display player inventory and health
     inventory_lines = [
-        f"Gold: {player_inventory.get('gold', 0)}",
-        f"Goods: {player_inventory.get('goods', 0)}",
-        f"Crew: {player_inventory.get('crew', 0)}"
+        f"Health: {player_ship.hull_health}",  # Display health
+        f"Gold: {player_ship.inventory.get('gold', 0)}",
+        f"Goods: {player_ship.inventory.get('goods', 0)}",
+        f"Crew: {player_ship.inventory.get('crew', 0)}"
     ]
     for i, line in enumerate(inventory_lines):
         text = font.render(line, True, (255, 255, 255))
@@ -146,8 +147,8 @@ def main():
     player_plunder = 0
     player_crew = 20
     player_inventory = {
-        "gold": 0,
-        "goods": 0,
+        "gold": 200,
+        "goods": 200,
         "crew": player_crew
     }
 
@@ -156,7 +157,7 @@ def main():
     ship = Ship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2, 20, 40)
 
     # Menus
-    port_menu = PortMenu()
+    port_menu = PortMenu(player_inventory, ship)
     tab_menu = TabMenu(ship)
 
     # List to store plunder objects
@@ -240,6 +241,29 @@ def main():
                     notifications.append([msg, notification_duration])
                     plunder_objects.append(npc.drop_plunder())
 
+        # NPC ships fire at player if within range
+        for npc in npc_ships:
+            npc.fire_cannon_at_player(ship)
+
+        # Draw NPC cannonballs
+        for npc in npc_ships:
+            for ball in npc.cannonballs:
+                if ball.alive:
+                    ball.draw(screen, camera_offset_x, camera_offset_y)
+
+        # Update NPC cannonballs
+        for npc in npc_ships:
+            for ball in npc.cannonballs:
+                ball.update()
+
+        # Check NPC cannonball collisions with the player
+        for npc in npc_ships:
+            for ball in npc.cannonballs:
+                if ball.alive and ball.collides_with_ship(ship):
+                    ship.hull_health -= 10  # Reduce player health by 10
+                    ball.alive = False
+                    notifications.append(["Hit by enemy cannonball!", notification_duration])
+
         # Update player inventory after collecting plunder
         player_inventory['gold'] = ship.inventory.get('gold', 0)
         player_inventory['goods'] = ship.inventory.get('goods', 0)
@@ -299,7 +323,8 @@ def main():
         elif active_menu == "port":
             port_menu.draw(screen, font)
 
-        draw_overlay(screen, font, player_inventory)
+        # Update player inventory overlay after menu actions
+        draw_overlay(screen, font, ship)
         draw_notifications(screen, font, notifications)
 
         # Update the display

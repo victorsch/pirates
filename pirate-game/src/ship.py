@@ -66,12 +66,15 @@ class Ship:
         elif self.speed > target_speed:
             self.speed = max(self.speed - self.base_acceleration * dt * 60, target_speed)
 
+        # Adjust turning speed based on current speed
+        turn_factor = max(0.5, 1 - (self.speed / self.max_speed))
+
         # Turning (only when moving)
         if self.speed != 0:
             if keys[pygame.K_LEFT]:
-                self.angle += self.turn_speed * (self.speed / self.max_speed) * dt * 60
+                self.angle += self.turn_speed * turn_factor * dt * 60
             if keys[pygame.K_RIGHT]:
-                self.angle -= self.turn_speed * (self.speed / self.max_speed) * dt * 60
+                self.angle -= self.turn_speed * turn_factor * dt * 60
         else:
             if keys[pygame.K_LEFT]:
                 self.angle += self.min_turn_speed * dt * 60
@@ -159,6 +162,10 @@ class Ship:
             island_rect = pygame.Rect(island.x, island.y, island.width, island.height)
             ship_rect = pygame.Rect(x - ship_width // 2, y - ship_height // 2, ship_width, ship_height)
             if island_rect.colliderect(ship_rect):
+                # Bounce off the island
+                direction = pygame.Vector2(x - island.x, y - island.y).normalize()
+                self.x += direction.x * 10  # Move away by 10 units
+                self.y += direction.y * 10
                 return True
         return False
     
@@ -184,12 +191,15 @@ class Ship:
                 # Left broadside (port)
                 lx = self.x + offset * perp_x
                 ly = self.y + offset * perp_y
-                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, speed=5))
+                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, parent=self))
 
                 # Right broadside (starboard)
                 rx = self.x - offset * perp_x
                 ry = self.y - offset * perp_y
-                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, speed=5))
+                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, parent=self))
+                
+                # Debug spawns
+                #self._last_broadside_points = [(lx, ly), (rx, ry)]
 
                 self.cannon_reload = 60  # 1 second at 60fps
         else:
