@@ -3,9 +3,10 @@ import math
 import random
 from ship import Ship
 from plunder import Plunder
+from cannonball import Cannonball
 
 class NpcShip(Ship):
-    def __init__(self, x, y, width=20, height=40, captain_name="Captain", ship_name="NPC Ship"):
+    def __init__(self, x, y, width=20, height=40, captain_name="Captain", ship_name="NPC Ship", player_ship=None):
         super().__init__(x, y, width, height)
         self.color = (100, 100, 100)
         self.target_angle = random.uniform(0, 360)
@@ -13,6 +14,8 @@ class NpcShip(Ship):
         self.change_timer = 0
         self.captain_name = captain_name
         self.ship_name = ship_name
+        #print(player_ship)
+        self.player_ship = player_ship
 
         # Weapons
         self.cannonballs = []
@@ -21,7 +24,7 @@ class NpcShip(Ship):
     def drop_plunder(self):
         return Plunder(self.x, self.y, random.randint(10, 50))
 
-    def update(self, islands=None, dt=1/60):
+    def update(self, islands=None, dt=1/60, player_ship=None):
         # Change direction and sail height every 2-5 seconds
         self.change_timer -= dt * 60
         if self.change_timer <= 0:
@@ -65,6 +68,55 @@ class NpcShip(Ship):
             self.y = next_y
         else:
             self.speed = 0  # Stop if would collide
+
+        # Fire cannonballs at player if in range
+        self.fire_cannon(player_ship)
+
+        # Update cannonballs
+        self.update_cannonballs()
+
+    def fire_cannon(self, player_ship):
+        if player_ship is None:
+            return
+        
+        # Reload timer
+        if (self.cannon_reload > 0):
+            self.cannon_reload -= 1
+            return
+
+        if self.cannon_reload <= 0:
+            # Check if player is in range
+            distance_to_player = math.sqrt((self.x - player_ship.x)**2 + (self.y - player_ship.y)**2)
+            if distance_to_player < 500:  # Example range
+                # Fire cannonballs
+                offset = self.width // 2
+                angle_rad = math.radians(self.angle)
+
+                # Perpendicular vector (unit vector)
+                perp_x = math.cos(angle_rad)
+                perp_y = -math.sin(angle_rad)
+
+                # Left broadside (port)
+                lx = self.x + offset * perp_x
+                ly = self.y + offset * perp_y
+                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, parent=self))
+
+                # Right broadside (starboard)
+                rx = self.x - offset * perp_x
+                ry = self.y - offset * perp_y
+                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, parent=self))
+
+                self.cannon_reload = 60  # 1 second at 60fps
+
+    def update_cannonballs(self):
+        for ball in self.cannonballs:
+            ball.update()
+        # Remove cannonballs that are off screen or not alive
+        self.cannonballs = [b for b in self.cannonballs if b.alive]
+
+    def draw_cannonballs(self, screen, camera_offset_x=0, camera_offset_y=0):
+        for ball in self.cannonballs:
+            ball.draw(screen, camera_offset_x, camera_offset_y)
 
     def draw(self, screen, camera_offset_x=0, camera_offset_y=0):
         cx = self.x - camera_offset_x
@@ -124,11 +176,4 @@ class NpcShip(Ship):
 
         # Debug center
         #pygame.draw.circle(screen, (255, 0, 0), (int(cx), int(cy)), 3)
-
-    # def check_cannonball_collision(self, cannonballs):
-    #     ship_rect = pygame.Rect(self.x - self.width // 2, self.y - self.height // 2, self.width, self.height)
-    #     for ball in cannonballs:
-    #         if ship_rect.collidepoint(ball.x, ball.y):
-    #             self.sunk = True
-    #             ball.alive = False
 

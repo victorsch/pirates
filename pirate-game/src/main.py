@@ -14,11 +14,11 @@ loaded_chunks = {}  # {(chunk_x, chunk_y): {"islands": [...], "npcs": [...]}}
 def get_chunk_coords(x, y):
     return int(x // CHUNK_SIZE), int(y // CHUNK_SIZE)
 
-def generate_chunk(chunk_x, chunk_y):
+def generate_chunk(chunk_x, chunk_y, player_ship=None):
     # Procedurally generate islands
     random.seed((chunk_x, chunk_y, "island"))
     islands = []
-    for _ in range(random.randint(0, 2)):
+    for _ in range(random.randint(2, 4)):
         ix = chunk_x * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
         iy = chunk_y * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
         has_port = random.choice([True, False])
@@ -28,20 +28,20 @@ def generate_chunk(chunk_x, chunk_y):
     # Procedurally generate NPC ships
     random.seed((chunk_x, chunk_y, "npc"))
     npcs = []
-    for _ in range(random.randint(0, 1)):
+    for _ in range(random.randint(2, 4)):
         nx = chunk_x * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
         ny = chunk_y * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
-        npcs.append(NpcShip(nx, ny, captain_name=utility.generate_captain_name(), ship_name=utility.generate_ship_name()))
+        npcs.append(NpcShip(nx, ny, captain_name=utility.generate_captain_name(), ship_name=utility.generate_ship_name(), player_ship=player_ship))
     return {"islands": islands, "npcs": npcs}
 
-def update_chunks(player_x, player_y):
+def update_chunks(player_x, player_y, player_ship=None):
     player_chunk = get_chunk_coords(player_x, player_y)
     # Load nearby chunks
     for dx in range(-2, 3):
         for dy in range(-2, 3):
             chunk = (player_chunk[0] + dx, player_chunk[1] + dy)
             if chunk not in loaded_chunks:
-                loaded_chunks[chunk] = generate_chunk(*chunk)
+                loaded_chunks[chunk] = generate_chunk(*chunk, player_ship=player_ship)
     # Optionally, unload far chunks for memory
     chunks_to_keep = set((player_chunk[0] + dx, player_chunk[1] + dy) for dx in range(-2, 3) for dy in range(-2, 3))
     for chunk in list(loaded_chunks.keys()):
@@ -184,7 +184,7 @@ def main():
         dt = clock.tick(60) / 1000.0
 
         # Update procedural chunks based on player position
-        update_chunks(ship.x, ship.y)
+        update_chunks(ship.x, ship.y, ship)
 
         # Gather all islands and npcs from loaded chunks
         islands = []
@@ -218,8 +218,10 @@ def main():
         # Remove sunk NPC ships
         npc_ships = [npc for npc in npc_ships if not npc.sunk]
         for npc in npc_ships:
-            npc.update(islands, dt=dt)
+            npc.update(islands, dt=dt, player_ship=ship)
             npc.draw(screen, camera_offset_x, camera_offset_y)
+            npc.update_cannonballs()
+            npc.draw_cannonballs(screen, camera_offset_x, camera_offset_y)
             if not npc.sunk:
                 npc.update(islands)
                 for ball in ship.cannonballs:
@@ -272,21 +274,27 @@ def main():
             note[1] -= dt
         notifications[:] = [n for n in notifications if n[1] > 0]
 
-        # Draw overlay
-        overlay_lines = [
+        # Draw overlay with player stats
+        overlay_rect = pygame.Rect(10, 10, 200, 100)
+        pygame.draw.rect(screen, (0, 0, 0), overlay_rect)  # Black background
+        pygame.draw.rect(screen, (255, 255, 255), overlay_rect, 2)
+
+        # Display player inventory and health
+        inventory_lines = [
             f"Plunder: {player_plunder}",
             f"Crew: {player_inventory['crew']}",
             f"Gold: {player_inventory['gold']}",
             f"Goods: {player_inventory['goods']}"
         ]
-        for i, line in enumerate(overlay_lines):
-            text = font.render(line, True, (255, 255, 0))
-            screen.blit(text, (10, 10 + i * 22))
+        for i, line in enumerate(inventory_lines):
+            text = font.render(line, True, (255, 255, 255))
+            screen.blit(text, (overlay_rect.x + 10, overlay_rect.y + 10 + i * 22))
 
-        # Draw notifications
+        # Draw notifications below the overlay
+        notification_y = overlay_rect.y + overlay_rect.height + 10  # Position below the overlay
         for i, note in enumerate(notifications):
             text = font.render(note[0], True, (255, 200, 200))
-            screen.blit(text, (10, 60 + i * 22))
+            screen.blit(text, (10, notification_y + i * 22))
 
         # Interact prompt
         at_port = is_near_port(ship, islands)
