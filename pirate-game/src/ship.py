@@ -151,7 +151,7 @@ class Ship:
             pygame.draw.polygon(screen, (255, 255, 255), [sail_base_left, sail_base_right, sail_tip])
 
         # Debug center
-        pygame.draw.circle(screen, (255, 0, 0), (int(cx), int(cy)), 3)
+        #pygame.draw.circle(screen, (255, 0, 0), (int(cx), int(cy)), 3)
 
 
     def collides_with_island(self, x, y, islands, ship_width, ship_height):
@@ -173,7 +173,7 @@ class Ship:
                     print(f"Failed to use ammo for {self.equipped_weapon}!")
                     return
 
-                # Offset from the center of the ship, perpendicular to the ship's angle
+                # Adjust cannonball positioning to align with the ship's center and orientation
                 offset = self.width // 2
                 angle_rad = math.radians(self.angle)
 
@@ -184,15 +184,12 @@ class Ship:
                 # Left broadside (port)
                 lx = self.x + offset * perp_x
                 ly = self.y + offset * perp_y
-                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, parent=self))
+                self.cannonballs.append(Cannonball(lx, ly, self.angle + 90, speed=5))
 
                 # Right broadside (starboard)
                 rx = self.x - offset * perp_x
                 ry = self.y - offset * perp_y
-                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, parent=self))
-                
-                # Debug spawns
-                #self._last_broadside_points = [(lx, ly), (rx, ry)]
+                self.cannonballs.append(Cannonball(rx, ry, self.angle - 90, speed=5))
 
                 self.cannon_reload = 60  # 1 second at 60fps
         else:

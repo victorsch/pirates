@@ -2,6 +2,7 @@ import pygame
 import math
 import random
 from ship import Ship
+from plunder import Plunder
 
 class NpcShip(Ship):
     def __init__(self, x, y, width=20, height=40, captain_name="Captain", ship_name="NPC Ship"):
@@ -121,11 +122,17 @@ class NpcShip(Ship):
         # Debug center
         #pygame.draw.circle(screen, (255, 0, 0), (int(cx), int(cy)), 3)
 
+    def drop_plunder(self):
+        """Create plunder when the ship is sunk."""
+        gold = random.randint(50, 200)
+        goods = random.randint(10, 50)
+        crew = random.randint(1, 5)
+        return Plunder(self.x, self.y, gold, goods, crew)
+
     # def check_cannonball_collision(self, cannonballs):
     #     ship_rect = pygame.Rect(self.x - self.width // 2, self.y - self.height // 2, self.width, self.height)
     #     for ball in cannonballs:
     #         if ship_rect.collidepoint(ball.x, ball.y):
     #             self.sunk = True
     #             ball.alive = False
-                
-    
+

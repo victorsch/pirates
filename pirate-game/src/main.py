@@ -8,6 +8,47 @@ from port_menu import PortMenu
 from tab_menu import TabMenu
 import utility
 
+CHUNK_SIZE = 1000
+loaded_chunks = {}  # {(chunk_x, chunk_y): {"islands": [...], "npcs": [...]}}
+
+def get_chunk_coords(x, y):
+    return int(x // CHUNK_SIZE), int(y // CHUNK_SIZE)
+
+def generate_chunk(chunk_x, chunk_y):
+    # Procedurally generate islands
+    random.seed((chunk_x, chunk_y, "island"))
+    islands = []
+    for _ in range(random.randint(0, 2)):
+        ix = chunk_x * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
+        iy = chunk_y * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
+        has_port = random.choice([True, False])
+        name = utility.generate_island_name()
+        port_name = utility.generate_port_name() if has_port else None
+        islands.append(Island(ix, iy, has_port=has_port, name=name, port_name=port_name))
+
+    # Procedurally generate NPC ships
+    random.seed((chunk_x, chunk_y, "npc"))
+    npcs = []
+    for _ in range(random.randint(4, 8)):
+        nx = chunk_x * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
+        ny = chunk_y * CHUNK_SIZE + random.randint(0, CHUNK_SIZE)
+        npcs.append(NpcShip(nx, ny, captain_name=utility.generate_captain_name(), ship_name=utility.generate_ship_name()))
+    return {"islands": islands, "npcs": npcs}
+
+def update_chunks(player_x, player_y):
+    player_chunk = get_chunk_coords(player_x, player_y)
+    # Load nearby chunks
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            chunk = (player_chunk[0] + dx, player_chunk[1] + dy)
+            if chunk not in loaded_chunks:
+                loaded_chunks[chunk] = generate_chunk(*chunk)
+    # Optionally, unload far chunks for memory
+    chunks_to_keep = set((player_chunk[0] + dx, player_chunk[1] + dy) for dx in range(-2, 3) for dy in range(-2, 3))
+    for chunk in list(loaded_chunks.keys()):
+        if chunk not in chunks_to_keep:
+            del loaded_chunks[chunk]
+
 # World state
 active_menu = None
 
@@ -30,7 +71,6 @@ def undock_ship(ship, island, distance=40):
     ship.x += direction.x * distance
     ship.y += direction.y * distance
 
-#at_port = nearest_port and is_near_port(ship, nearest_port)
 def handle_menus(ship, port_menu, tab_menu, islands, screen, font):
     global active_menu
 
@@ -57,89 +97,85 @@ def handle_menus(ship, port_menu, tab_menu, islands, screen, font):
                 if result == "Leave Port" or event.key == pygame.K_ESCAPE:
                     port_menu.close()
                     active_menu = None
-            # Handle other port menu actions here
-
-    
     return None  # Continue normal gameplay
+
+def draw_overlay(screen, font, player_inventory):
+    # Draw overlay with player stats
+    overlay_rect = pygame.Rect(10, 10, 200, 100)
+    pygame.draw.rect(screen, (0, 0, 0), overlay_rect)
+    pygame.draw.rect(screen, (255, 255, 255), overlay_rect, 2)
+
+    # Display player inventory
+    inventory_lines = [
+        f"Gold: {player_inventory.get('gold', 0)}",
+        f"Goods: {player_inventory.get('goods', 0)}",
+        f"Crew: {player_inventory.get('crew', 0)}"
+    ]
+    for i, line in enumerate(inventory_lines):
+        text = font.render(line, True, (255, 255, 255))
+        screen.blit(text, (overlay_rect.x + 10, overlay_rect.y + 10 + i * 30))
+
+def draw_notifications(screen, font, notifications):
+    # Draw notifications below the overlay
+    notification_y = 120  # Position below the overlay
+    for message, ttl in notifications:
+        text = font.render(message, True, (255, 255, 255))
+        screen.blit(text, (10, notification_y))
+        notification_y += 30
 
 def main():
     pygame.init()
 
-    
-
     # World info
     MAP_WIDTH = 20000
     MAP_HEIGHT = 20000
-    island_count = 100
 
     # Set up the game window
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Open World Pirate Game")
     clock = pygame.time.Clock()
-    #dt = clock.tick(60) / 1000.0  # 60 FPS cap, dt in seconds
     font = pygame.font.SysFont(None, 24)
 
     SMOOTHING = 0.1 # For movement - Lower = more lag, Higher = snappier
 
     # Notifications at top of screen
     notifications = []  # List of (message, time_to_live)
-    notification_duration = 20.0  # seconds
+    notification_duration = 3.0  # seconds
 
     # Player ship stats
     player_plunder = 0
     player_crew = 20
+    player_inventory = {
+        "gold": 0,
+        "goods": 0,
+        "crew": player_crew
+    }
 
     # Create instances of Ship and Ocean
-    ocean = Ocean(SCREEN_WIDTH,SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT)
+    ocean = Ocean(SCREEN_WIDTH, SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT)
     ship = Ship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2, 20, 40)
-
-
-    # Create islands, avoiding the player ship's spawn area
-    islands = []
-    while len(islands) < island_count:
-        ix = random.randint(-MAP_WIDTH, MAP_WIDTH)
-        iy = random.randint(-MAP_HEIGHT, MAP_HEIGHT)
-        island = Island(ix, iy)
-        # Check overlap with player ship
-        ship_rect = pygame.Rect(
-            ship.x - ship.width // 2,
-            ship.y - ship.height // 2,
-            ship.width,
-            ship.height
-        )
-        island_rect = pygame.Rect(island.x, island.y, island.width, island.height)
-        if not island_rect.colliderect(ship_rect):
-            islands.append(island)
-
-    # spawn port island just to left of player spawn
-    port_island = Island(ship.x - 200, ship.y, has_port=True)
-    islands.append(port_island)
-
-    # Create NPC ships, avoiding islands
-    npc_ships = []
-    while len(npc_ships) < 15:
-        nx = random.randint(-500, 1500)
-        ny = random.randint(-500, 1500)
-        npc = NpcShip(nx, ny, captain_name=utility.generate_captain_name(), ship_name=utility.generate_ship_name())
-        npc_rect = pygame.Rect(
-            npc.x - npc.width // 2,
-            npc.y - npc.height // 2,
-            npc.width,
-            npc.height
-        )
-        # Ensure NPC does not spawn on any island
-        if not any(pygame.Rect(island.x, island.y, island.width, island.height).colliderect(npc_rect) for island in islands):
-            npc_ships.append(npc)
-
 
     # Menus
     port_menu = PortMenu()
     tab_menu = TabMenu(ship)
 
+    # List to store plunder objects
+    plunder_objects = []
+
     # Main game loop
     running = True
     while running:
         dt = clock.tick(60) / 1000.0
+
+        # Update procedural chunks based on player position
+        update_chunks(ship.x, ship.y)
+
+        # Gather all islands and npcs from loaded chunks
+        islands = []
+        npc_ships = []
+        for chunk in loaded_chunks.values():
+            islands.extend(chunk["islands"])
+            npc_ships.extend(chunk["npcs"])
 
         # Handle menus
         menu_state = handle_menus(ship, port_menu, tab_menu, islands, screen, font)
@@ -149,53 +185,32 @@ def main():
         elif menu_state == "menu":
             continue  # Skip the rest of the loop this frame
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        # Gameplay logic
-
-        # Display logic
-        
         # Camera offset so ship is always centered
         camera_offset_x = ship.x - SCREEN_WIDTH // 2
         camera_offset_y = ship.y - SCREEN_HEIGHT // 2
-        
+
         # Fill the background with ocean color
         ocean.draw(screen, ship.x, ship.y)
-        
+
         # Draw the ship
         ship.draw(screen, camera_offset_x, camera_offset_y)
 
-         # Draw islands
+        # Draw islands
         for island in islands:
             island.draw(screen, camera_offset_x, camera_offset_y)
 
-        
-        # In your game loop:
-        npc_ships = [npc for npc in npc_ships if not npc.sunk] # Remove sunk NPC ships
+        # Remove sunk NPC ships and handle plunder
+        npc_ships = [npc for npc in npc_ships if not npc.sunk]
         for npc in npc_ships:
             npc.update(islands, dt=dt)
             npc.draw(screen, camera_offset_x, camera_offset_y)
-            if not npc.sunk:
-                npc.update(islands)
-                for ball in ship.cannonballs:
-                    if ball.alive and ball.collides_with_ship(npc):
-                        npc.sunk = True
-                        ball.alive = False
-                        msg = f"Sank {npc.captain_name}'s ship {npc.ship_name}!"
-                        notifications.append([msg, notification_duration])
-                        player_plunder += random.randint(10, 50)  # Example plunder
-                        player_crew += random.randint(1, 5) 
-                npc.draw(screen, camera_offset_x, camera_offset_y)
-            for ball in npc.cannonballs:
-                if ball.alive and ball.collides_with_ship(ship):
-                    # Handle player hit (e.g., reduce health, sink, etc.)
-                    ball.alive = False
-        
 
+        # Draw and handle plunder
+        for plunder in plunder_objects:
+            plunder.draw(screen, camera_offset_x, camera_offset_y)
+            plunder.check_collision(ship)
 
-        # Player
+        # Player movement and logic
         next_x = ship.x
         next_y = ship.y
         rad = math.radians(ship.angle)
@@ -212,10 +227,23 @@ def main():
         else:
             ship.speed = 0  # Stop the ship if it would collide
 
-
         if active_menu is None:
             ship.update(pygame.key.get_pressed(), dt)
 
+        # Check cannonball collisions with NPC ships
+        for npc in npc_ships:
+            for ball in ship.cannonballs:
+                if ball.alive and ball.collides_with_ship(npc):
+                    npc.sunk = True
+                    ball.alive = False
+                    msg = f"Sank {npc.captain_name}'s ship {npc.ship_name}!"
+                    notifications.append([msg, notification_duration])
+                    plunder_objects.append(npc.drop_plunder())
+
+        # Update player inventory after collecting plunder
+        player_inventory['gold'] = ship.inventory.get('gold', 0)
+        player_inventory['goods'] = ship.inventory.get('goods', 0)
+        player_inventory['crew'] = ship.inventory.get('crew', 0)
 
         # Update notifications
         for note in notifications:
@@ -223,7 +251,6 @@ def main():
         notifications[:] = [n for n in notifications if n[1] > 0]
 
         # Draw overlay
-        
         overlay_lines = [
             f"Plunder: {player_plunder}",
             f"Crew: {player_crew}"
@@ -233,16 +260,16 @@ def main():
             screen.blit(text, (10, 10 + i * 22))
 
         # Draw notifications
+        notification_y = 120  # Position below the overlay
         for i, note in enumerate(notifications):
             text = font.render(note[0], True, (255, 200, 200))
-            screen.blit(text, (10, 60 + i * 22))
+            screen.blit(text, (10, notification_y + i * 22))
 
         # Interact prompt
         at_port = is_near_port(ship, islands)
         if at_port and not port_menu.active:
             prompt_text = font.render("Press F to interact with port", True, (255, 255, 255))
             screen.blit(prompt_text, (10, SCREEN_HEIGHT - 40))
-
 
         # Draw arrow to nearest island (for debugging)
         if islands:
@@ -255,8 +282,6 @@ def main():
             start_pos = (int(ship.x - camera_offset_x), int(ship.y - camera_offset_y))
             end_pos = (int(island_center.x - camera_offset_x), int(island_center.y - camera_offset_y))
 
-            
-
             # Draw arrowhead
             direction = (island_center - ship_center).normalize()
             arrow_length = 20
@@ -268,16 +293,18 @@ def main():
             #pygame.draw.line(screen, (0, 255, 0), start_pos, end_pos, 3)
             #pygame.draw.line(screen, (0, 255, 0), arrow_tip, arrow_tip - left, 3)
             #pygame.draw.line(screen, (0, 255, 0), arrow_tip, arrow_tip - right, 3)
-        
+
         if active_menu == "tab":
-            # Draw your tab menu overlay here
             tab_menu.draw(screen, font)
         elif active_menu == "port":
             port_menu.draw(screen, font)
 
+        draw_overlay(screen, font, player_inventory)
+        draw_notifications(screen, font, notifications)
+
         # Update the display
         pygame.display.flip()
-    
+
     pygame.quit()
 
 if __name__ == "__main__":
