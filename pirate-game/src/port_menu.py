@@ -7,6 +7,8 @@ class PortMenu:
         self.options = ["Buy Goods", "Sell Goods", "Leave Port"]
         self.selected_option = 0
         self.goods_cost = random.randint(30, 70)  # Dynamic cost for goods
+        self.options.append("Repair Hull")  # Add repair hull option
+        self.repair_cost = random.randint(50, 100)  # Dynamic cost for hull repair
 
     def open(self):
         self.active = True
@@ -21,6 +23,8 @@ class PortMenu:
             elif event.key == pygame.K_DOWN:
                 self.selected_option = (self.selected_option + 1) % len(self.options)
             elif event.key == pygame.K_RETURN:
+                if self.options[self.selected_option] == "Repair Hull":
+                    return "Repair Hull"
                 return self.options[self.selected_option]
         return None
 
@@ -40,3 +44,7 @@ class PortMenu:
         # Display dynamic goods cost
         cost_text = font.render(f"Goods Cost: {self.goods_cost} gold", True, (255, 255, 0))
         screen.blit(cost_text, (menu_x + 20, menu_y + menu_height - 40))
+
+        # Display repair cost
+        repair_text = font.render(f"Repair Cost: {self.repair_cost} gold", True, (255, 255, 0))
+        screen.blit(repair_text, (menu_x + 20, menu_y + menu_height - 70))

@@ -11,6 +11,9 @@ import utility
 CHUNK_SIZE = 1000
 loaded_chunks = {}  # {(chunk_x, chunk_y): {"islands": [...], "npcs": [...]}}
 
+notifications = []  # List of (message, time_to_live)
+notification_duration = 3.0  # seconds
+
 def get_chunk_coords(x, y):
     return int(x // CHUNK_SIZE), int(y // CHUNK_SIZE)
 
@@ -76,6 +79,8 @@ player_inventory = {"gold": 100, "goods": 0, "crew": 20}
 # Update handle_menus to process port menu actions
 def handle_menus(ship, port_menu, tab_menu, islands, screen, font):
     global active_menu
+    global notifications
+    global notification_duration
 
     # Check if player is at a port
     at_port = is_near_port(ship, islands)
@@ -111,6 +116,14 @@ def handle_menus(ship, port_menu, tab_menu, islands, screen, font):
                         player_inventory["gold"] += port_menu.goods_cost
                     else:
                         print("No goods to sell!")
+                elif result == "Repair Hull":
+                    print("Repairing hull...")
+                    if player_inventory["gold"] >= port_menu.repair_cost:
+                        ship.hull_health = min(ship.hull_health + 50, 100)  # Repair up to max health
+                        player_inventory["gold"] -= port_menu.repair_cost
+                        notifications.append(["Hull repaired!", notification_duration])
+                    else:
+                        print("Not enough gold!")
                 elif result == "Leave Port" or event.key == pygame.K_ESCAPE:
                     port_menu.close()
                     active_menu = None
@@ -147,6 +160,13 @@ class Plunder:
 def main():
     pygame.init()
 
+    # Ensure notifications and notification_duration are defined at the start of the main function
+    #notifications = []  # List of (message, time_to_live)
+    #notification_duration = 3.0  # seconds
+
+    global notifications
+    global notification_duration
+
     # World info
     MAP_WIDTH = 20000
     MAP_HEIGHT = 20000
@@ -158,10 +178,6 @@ def main():
     font = pygame.font.SysFont(None, 24)
 
     SMOOTHING = 0.1 # For movement - Lower = more lag, Higher = snappier
-
-    # Notifications at top of screen
-    notifications = []  # List of (message, time_to_live)
-    notification_duration = 20.0  # seconds
 
     # Player ship stats
     player_plunder = 0
@@ -232,9 +248,12 @@ def main():
                         notifications.append([msg, notification_duration])
                         plunders.append(Plunder(npc.x, npc.y, random.randint(10, 50)))  # Drop plunder
                 npc.draw(screen, camera_offset_x, camera_offset_y)
+            # Check for enemy cannonball collisions with player
             for ball in npc.cannonballs:
                 if ball.alive and ball.collides_with_ship(ship):
                     ball.alive = False
+                    ship.hull_health -= 10  # Reduce player health by 10
+                    notifications.append(["Hit by enemy cannonball!", notification_duration])
 
         # Draw and collect plunder
         for plunder in plunders:
@@ -279,12 +298,12 @@ def main():
         pygame.draw.rect(screen, (0, 0, 0), overlay_rect)  # Black background
         pygame.draw.rect(screen, (255, 255, 255), overlay_rect, 2)
 
-        # Display player inventory and health
+        # Update overlay to include player hull health
         inventory_lines = [
+            f"Hull Health: {ship.hull_health}",
             f"Plunder: {player_plunder}",
-            f"Crew: {player_inventory['crew']}",
             f"Gold: {player_inventory['gold']}",
-            f"Goods: {player_inventory['goods']}"
+            f"Goods: {player_inventory['goods']}",
         ]
         for i, line in enumerate(inventory_lines):
             text = font.render(line, True, (255, 255, 255))
